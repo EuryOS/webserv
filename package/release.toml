@@ -1,0 +1,16 @@
+# Release metadata consumed by package-index tooling.
+# A package version is logical; artifacts are target-specific.
+
+[release]
+package = "webserv"
+version = "0.1.0"
+source_revision = "REPLACE_WITH_TAG_COMMIT"
+manifest_sha256 = "REPLACE_WITH_MANIFEST_DIGEST"
+
+[[artifact]]
+target = "aarch64-euryos-driver"
+os_abi = "euryos-abi-v1"
+profile = "server"
+path = "webserv-0.1.0-aarch64-euryos-driver.eury"
+sha256 = "REPLACE_WITH_ARTIFACT_DIGEST"
+signature = "embedded:development-anchor"

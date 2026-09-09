@@ -1,0 +1,39 @@
+# Experimental package contract for the first standalone package repository.
+# This is deliberately readable by humans and easy for index CI to validate.
+
+[package]
+name = "webserv"
+version = "0.1.0"
+publisher = "euryos.dev"
+api_level = 3
+kind = "service"
+description = "A native capability-aware web server for EuryOS"
+homepage = "https://github.com/EuryOS/webserv"
+license = "Proprietary"
+
+[source]
+repository = "https://github.com/EuryOS/webserv.git"
+
+[runtime]
+# The package is compiled against this pinned public runtime boundary. The
+# index/release record must replace this revision with the exact one used by
+# each artifact; a floating branch is not a reproducible package input.
+sdk = "eury-sdk"
+sdk_version = "0.1.0"
+sdk_revision = "0ed54a48"
+abi_revision = "0ed54a48"
+
+[component.webserv]
+kind = "service"
+binary = "bin/main.elf"
+entry = "webserv"
+memory_reservation = "8MiB"
+
+# Capabilities are catalog requests, not authored kernel grants. Installation
+# and launch derive object type and rights from the platform catalog, then
+# intersect the requests with the concrete boot offers.
+[component.webserv.capabilities]
+net_ep = { name = "net.endpoint", required = true, reason = "Accept HTTP connections on an explicitly configured port" }
+net_buf = { name = "net.buffer", required = true, reason = "Exchange socket requests with the network service" }
+fs_ep = { name = "fs.endpoint", required = true, reason = "Read the explicitly configured document root" }
+fs_buf = { name = "fs.buffer", required = true, reason = "Exchange filesystem requests with the filesystem service" }

@@ -1,0 +1,12 @@
+[package]
+name = "webserv-core"
+version = "0.1.0"
+edition = "2021"
+description = "Bounded native HTTP protocol core for EuryOS webserv"
+license = "Proprietary"
+
+[lib]
+path = "src/lib.rs"
+
+[workspace]
+members = ["service"]

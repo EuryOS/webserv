@@ -1,0 +1,23 @@
+[package]
+name = "webserv"
+version = "0.1.0"
+edition = "2021"
+description = "Capability-native HTTP service for EuryOS"
+license = "Proprietary"
+
+[[bin]]
+name = "webserv"
+path = "src/main.rs"
+test = false
+doctest = false
+
+[dependencies]
+webserv-core = { package = "webserv-core", path = ".." }
+
+# The package SDK is pinned per release so the binary is reproducible and
+# cannot silently follow an incompatible OS/runtime boundary.
+eury-sdk = {
+    git = "https://github.com/EuryOS/EuryOS",
+    rev = "0ed54a48",
+    features = ["absorber", "heap"],
+}

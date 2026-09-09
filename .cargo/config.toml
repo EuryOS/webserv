@@ -1,0 +1,6 @@
+[net]
+# Git dependencies are part of the pre-registry package workflow. Use the
+# user's configured git transport/credential path rather than Cargo's separate
+# libgit2 credential lookup, which otherwise makes a public package checkout
+# fail on hosts with normal GitHub CLI configuration.
+git-fetch-with-cli = true

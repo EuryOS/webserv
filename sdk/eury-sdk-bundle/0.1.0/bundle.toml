@@ -1,0 +1,9 @@
+[bundle]
+name = "eury-sdk"
+version = "0.1.0"
+toolchain = "nightly-2026-07-26"
+target = "aarch64-euryos-driver"
+target_spec = "targets/aarch64-euryos-driver.json.in"
+linker_script = "linker/driver.ld"
+build_std = ["core", "alloc", "compiler_builtins"]
+build_std_features = ["compiler-builtins-mem"]

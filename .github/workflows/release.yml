@@ -1,0 +1,209 @@
+name: Release
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/release.yml"
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "package/**"
+      - "service/**"
+      - "src/**"
+      - "sdk/**"
+      - "scripts/**"
+      - "rust-toolchain.toml"
+  push:
+    branches:
+      - main
+    tags:
+      - "webserv-v*"
+    paths:
+      - ".github/workflows/release.yml"
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "package/**"
+      - "service/**"
+      - "src/**"
+      - "sdk/**"
+      - "scripts/**"
+      - "rust-toolchain.toml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  metadata:
+    name: Validate package metadata
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.metadata.outputs.version }}
+      sdk_commit: ${{ steps.metadata.outputs.sdk_commit }}
+      should_release: ${{ steps.release_gate.outputs.should_release }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate versions and SDK pin
+        id: metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          read_section_value() {
+            local file="$1"
+            local section="$2"
+            local key="$3"
+            awk -v wanted_section="$section" -v wanted_key="$key" '
+              $0 == "[" wanted_section "]" { in_section = 1; next }
+              $0 ~ /^\[/ { in_section = 0 }
+              in_section && $1 == wanted_key && $2 == "=" {
+                value = $3
+                gsub(/"/, "", value)
+                print value
+                exit
+              }
+            ' "$file"
+          }
+
+          package_version="$(read_section_value package/package.toml package version)"
+          release_version="$(read_section_value package/release.toml release version)"
+          core_version="$(read_section_value Cargo.toml package version)"
+          service_version="$(read_section_value service/Cargo.toml package version)"
+          sdk_revision="$(read_section_value package/package.toml runtime sdk_revision)"
+
+          test -n "$package_version"
+          test "$package_version" = "$release_version"
+          test "$package_version" = "$core_version"
+          test "$package_version" = "$service_version"
+
+          sdk_commit="$(sed -n 's/.*#\([0-9a-f]\{40\}\)".*/\1/p' Cargo.lock | head -n 1)"
+          test "${#sdk_commit}" -eq 40
+          case "$sdk_commit" in
+            "$sdk_revision"*) ;;
+            *)
+              echo "Cargo.lock SDK revision $sdk_commit does not match package sdk_revision $sdk_revision" >&2
+              exit 1
+              ;;
+          esac
+
+          echo "version=$package_version" >> "$GITHUB_OUTPUT"
+          echo "sdk_commit=$sdk_commit" >> "$GITHUB_OUTPUT"
+
+      - name: Decide whether this event publishes a release
+        id: release_gate
+        shell: bash
+        env:
+          EVENT_BEFORE: ${{ github.event.before }}
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          VERSION: ${{ steps.metadata.outputs.version }}
+        run: |
+          set -euo pipefail
+          should_release=false
+
+          if [ "$EVENT_NAME" = workflow_dispatch ]; then
+            should_release=true
+          elif [ "$EVENT_NAME" = push ] && [ "$REF_TYPE" = tag ]; then
+            tag_version="${REF_NAME#webserv-v}"
+            test "$tag_version" = "$VERSION" || {
+              echo "tag $REF_NAME does not match package version $VERSION" >&2
+              exit 1
+            }
+            should_release=true
+          elif [ "$EVENT_NAME" = push ] && [ "$REF_NAME" = main ]; then
+            if [ -z "$EVENT_BEFORE" ] || [ "$EVENT_BEFORE" = "0000000000000000000000000000000000000000" ]; then
+              should_release=true
+            else
+              old_version="$(git show "${EVENT_BEFORE}:package/package.toml" 2>/dev/null | awk '
+                $0 == "[package]" { in_section = 1; next }
+                $0 ~ /^\[/ { in_section = 0 }
+                in_section && $1 == "version" && $2 == "=" {
+                  gsub(/"/, "", $3)
+                  print $3
+                  exit
+                }
+              ' || true)"
+              if [ "$old_version" != "$VERSION" ]; then
+                should_release=true
+              fi
+            fi
+          fi
+
+          echo "should_release=$should_release" >> "$GITHUB_OUTPUT"
+
+  verify:
+    name: Verify source and standalone bundle
+    needs: metadata
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-07-26
+          components: rust-src, llvm-tools-preview, rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Check shell scripts
+        run: sh -n scripts/release.sh sdk/eury-sdk-bundle/0.1.0/build.sh
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run host tests
+        run: cargo test --workspace
+
+      - name: Build standalone EuryOS service
+        run: sh sdk/eury-sdk-bundle/0.1.0/build.sh service
+
+  release:
+    name: Build and publish package release
+    needs:
+      - metadata
+      - verify
+    if: needs.metadata.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/checkout@v4
+        with:
+          repository: EuryOS/EuryOS
+          ref: ${{ needs.metadata.outputs.sdk_commit }}
+          path: euryos
+          fetch-depth: 0
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-07-26
+          components: rust-src, llvm-tools-preview, rustfmt, clippy
+
+      - name: Build release artifacts
+        run: sh scripts/release.sh euryos "$RUNNER_TEMP/webserv-release" dev
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: webserv-v${{ needs.metadata.outputs.version }}
+          prerelease: true
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            ${{ runner.temp }}/webserv-release/webserv-${{ needs.metadata.outputs.version }}-aarch64-euryos-driver.eury
+            ${{ runner.temp }}/webserv-release/webserv-${{ needs.metadata.outputs.version }}-aarch64-euryos-driver.elf
+            ${{ runner.temp }}/webserv-release/webserv-${{ needs.metadata.outputs.version }}-release.toml
+            ${{ runner.temp }}/webserv-release/webserv-${{ needs.metadata.outputs.version }}-SHA256SUMS
