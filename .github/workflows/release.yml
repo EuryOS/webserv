@@ -159,6 +159,9 @@ jobs:
       - name: Check formatting
         run: cargo fmt --all -- --check
 
+      - name: Run public core tests
+        run: cargo test -p webserv-core
+
       - name: Configure private EuryOS dependency access
         if: github.event_name != 'pull_request'
         env:
@@ -171,9 +174,6 @@ jobs:
             exit 1
           }
           git config --global url."https://x-access-token:${EURYOS_READ_TOKEN}@github.com/EuryOS/".insteadOf "https://github.com/EuryOS/"
-
-      - name: Run public core tests
-        run: cargo test -p webserv-core
 
       - name: Run full workspace tests
         if: github.event_name != 'pull_request'
