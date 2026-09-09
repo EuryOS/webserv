@@ -61,7 +61,7 @@ if [ "$PACKAGE_VERSION" != "$RELEASE_VERSION" ] || \
     exit 2
 fi
 
-SDK_COMMIT=$(sed -n 's/.*#\([0-9a-f][0-9a-f]*\)".*/\1/p' "$WEBSERV_ROOT/Cargo.lock" | head -n 1)
+SDK_COMMIT=$(sed -n 's/.*#\([0-9a-f][0-9a-f]*\)".*/\1/p' "$WEBSERV_ROOT/service/Cargo.lock" | head -n 1)
 EURYOS_COMMIT=$(git -C "$EURYOS_ROOT" rev-parse HEAD)
 case "$EURYOS_COMMIT" in
     "$SDK_COMMIT") ;;

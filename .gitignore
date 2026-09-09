@@ -1,3 +1,4 @@
 /target/
+/service/target/
 /artifacts/*.elf
 /artifacts/*.sig

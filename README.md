@@ -43,7 +43,9 @@ question that this pilot is meant to settle:
 
 The service slice wires the core to EuryOS network and filesystem session
 capabilities. Its `eury-sdk` Git revision and compatibility version are pinned
-in `service/Cargo.toml` and the package metadata. The checked-in
+in `service/Cargo.toml`, `service/Cargo.lock`, and the package metadata. The
+public protocol core and the standalone service use separate Cargo workspaces,
+so core tests do not require access to the private EuryOS repository. The checked-in
 `sdk/eury-sdk-bundle/0.1.0` is the standalone target/toolchain/linker input for
 this example; it does not require an EuryOS source checkout. Build it with:
 
@@ -66,6 +68,13 @@ ELF, SHA-256 checksums, and materialized release metadata. The current archive
 uses EuryOS's public development trust anchor so it can be installed by the
 development QEMU image. Production publication still needs a production
 signing key and corresponding platform trust configuration.
+
+Because the SDK is still Git-pinned and the EuryOS repository is private, push,
+tag, and manual release runs require a repository secret named
+`EURYOS_READ_TOKEN`. It must be a read-only token scoped to the EuryOS
+repository. Pull requests run the public protocol-core checks without that
+secret. This temporary credential disappears when the SDK dependency closure is
+published for public consumption.
 
 ## License
 

@@ -21,3 +21,5 @@ eury-sdk = {
     rev = "0ed54a48",
     features = ["absorber", "heap"],
 }
+
+[workspace]

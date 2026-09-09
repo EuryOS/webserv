@@ -9,4 +9,3 @@ license = "Proprietary"
 path = "src/lib.rs"
 
 [workspace]
-members = ["service"]

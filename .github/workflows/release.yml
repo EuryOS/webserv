@@ -82,7 +82,7 @@ jobs:
           test "$package_version" = "$core_version"
           test "$package_version" = "$service_version"
 
-          sdk_commit="$(sed -n 's/.*#\([0-9a-f]\{40\}\)".*/\1/p' Cargo.lock | head -n 1)"
+          sdk_commit="$(sed -n 's/.*#\([0-9a-f]\{40\}\)".*/\1/p' service/Cargo.lock | head -n 1)"
           test "${#sdk_commit}" -eq 40
           case "$sdk_commit" in
             "$sdk_revision"*) ;;
@@ -159,10 +159,28 @@ jobs:
       - name: Check formatting
         run: cargo fmt --all -- --check
 
-      - name: Run host tests
+      - name: Configure private EuryOS dependency access
+        if: github.event_name != 'pull_request'
+        env:
+          EURYOS_READ_TOKEN: ${{ secrets.EURYOS_READ_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$EURYOS_READ_TOKEN" || {
+            echo "EURYOS_READ_TOKEN repository secret is required for trusted builds" >&2
+            exit 1
+          }
+          git config --global url."https://x-access-token:${EURYOS_READ_TOKEN}@github.com/EuryOS/".insteadOf "https://github.com/EuryOS/"
+
+      - name: Run public core tests
+        run: cargo test -p webserv-core
+
+      - name: Run full workspace tests
+        if: github.event_name != 'pull_request'
         run: cargo test --workspace
 
       - name: Build standalone EuryOS service
+        if: github.event_name != 'pull_request'
         run: sh sdk/eury-sdk-bundle/0.1.0/build.sh service
 
   release:
@@ -186,11 +204,24 @@ jobs:
           ref: ${{ needs.metadata.outputs.sdk_commit }}
           path: euryos
           fetch-depth: 0
+          token: ${{ secrets.EURYOS_READ_TOKEN }}
 
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: nightly-2026-07-26
           components: rust-src, llvm-tools-preview, rustfmt, clippy
+
+      - name: Configure private EuryOS dependency access
+        env:
+          EURYOS_READ_TOKEN: ${{ secrets.EURYOS_READ_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$EURYOS_READ_TOKEN" || {
+            echo "EURYOS_READ_TOKEN repository secret is required for releases" >&2
+            exit 1
+          }
+          git config --global url."https://x-access-token:${EURYOS_READ_TOKEN}@github.com/EuryOS/".insteadOf "https://github.com/EuryOS/"
 
       - name: Build release artifacts
         run: sh scripts/release.sh euryos "$RUNNER_TEMP/webserv-release" dev
