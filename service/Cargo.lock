@@ -4,14 +4,15 @@ version = 4
 
 [[package]]
 name = "bitflags"
-version = "2.13.1"
+version = "2.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b588b76d00fde79687d7646a9b5bdf3cc0f655e0bbd080335a95d7e96f3587da"
+checksum = "3ded4057c258ba199e2d26386d3af3780957ecaee6c4ef4041c6b4b8b97c0b06"
 
 [[package]]
 name = "eury-abi"
 version = "0.1.0"
-source = "git+https://github.com/EuryOS/EuryOS?rev=0ed54a48#0ed54a48ce82e934e9e787d096fc72a51af94dab"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ca8d3641449e8e5bddbcf4df540d9f16cee3159b7d8a5440b576645cb11adb65"
 dependencies = [
  "bitflags",
 ]
@@ -19,7 +20,8 @@ dependencies = [
 [[package]]
 name = "eury-fs-client"
 version = "0.1.0"
-source = "git+https://github.com/EuryOS/EuryOS?rev=0ed54a48#0ed54a48ce82e934e9e787d096fc72a51af94dab"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1e5e627d67284b4451ac08c8651d23c86d6633f9b4feb6173f7d1bfd2327603b"
 dependencies = [
  "eury-fs-protocol",
  "eury-syscall",
@@ -28,7 +30,8 @@ dependencies = [
 [[package]]
 name = "eury-fs-protocol"
 version = "0.1.0"
-source = "git+https://github.com/EuryOS/EuryOS?rev=0ed54a48#0ed54a48ce82e934e9e787d096fc72a51af94dab"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9d87d4f3ae2c5cfc731ec8a83f738734dd9d741a6d5e8c8aa2dac3a4d07be2c8"
 dependencies = [
  "eury-abi",
 ]
@@ -36,7 +39,8 @@ dependencies = [
 [[package]]
 name = "eury-sdk"
 version = "0.1.0"
-source = "git+https://github.com/EuryOS/EuryOS?rev=0ed54a48#0ed54a48ce82e934e9e787d096fc72a51af94dab"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a7988c66be9bd56691fd3af98491eff14b5ed02961a9e1391fc743f284075823"
 dependencies = [
  "eury-abi",
  "eury-fs-client",
@@ -48,7 +52,8 @@ dependencies = [
 [[package]]
 name = "eury-shell-session"
 version = "0.1.0"
-source = "git+https://github.com/EuryOS/EuryOS?rev=0ed54a48#0ed54a48ce82e934e9e787d096fc72a51af94dab"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f097ffef8589c10fdfc18a3985207e0807b2905488371d422052d378a38f73bc"
 dependencies = [
  "eury-fs-client",
  "eury-syscall",
@@ -57,7 +62,8 @@ dependencies = [
 [[package]]
 name = "eury-syscall"
 version = "0.1.0"
-source = "git+https://github.com/EuryOS/EuryOS?rev=0ed54a48#0ed54a48ce82e934e9e787d096fc72a51af94dab"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "575794b317e58903766cff2f48166176bf8e7bb9c0d364c51b10588d35bcc2c3"
 dependencies = [
  "eury-abi",
 ]
@@ -65,7 +71,8 @@ dependencies = [
 [[package]]
 name = "euryos-libos"
 version = "0.1.0"
-source = "git+https://github.com/EuryOS/EuryOS?rev=0ed54a48#0ed54a48ce82e934e9e787d096fc72a51af94dab"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c1e5e387bb88bded9aa7f8fb5b90a043565c40516487ea199a4c8bb6c99e7629"
 dependencies = [
  "eury-abi",
  "eury-syscall",

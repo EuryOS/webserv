@@ -42,14 +42,13 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.metadata.outputs.version }}
-      sdk_commit: ${{ steps.metadata.outputs.sdk_commit }}
       should_release: ${{ steps.release_gate.outputs.should_release }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Validate versions and SDK pin
+      - name: Validate versions and public SDK
         id: metadata
         shell: bash
         run: |
@@ -75,25 +74,40 @@ jobs:
           release_version="$(read_section_value package/release.toml release version)"
           core_version="$(read_section_value Cargo.toml package version)"
           service_version="$(read_section_value service/Cargo.toml package version)"
-          sdk_revision="$(read_section_value package/package.toml runtime sdk_revision)"
+          sdk_version="$(read_section_value package/package.toml runtime sdk_version)"
 
           test -n "$package_version"
           test "$package_version" = "$release_version"
           test "$package_version" = "$core_version"
           test "$package_version" = "$service_version"
+          test -n "$sdk_version"
 
-          sdk_commit="$(sed -n 's/.*#\([0-9a-f]\{40\}\)".*/\1/p' service/Cargo.lock | head -n 1)"
-          test "${#sdk_commit}" -eq 40
-          case "$sdk_commit" in
-            "$sdk_revision"*) ;;
-            *)
-              echo "Cargo.lock SDK revision $sdk_commit does not match package sdk_revision $sdk_revision" >&2
-              exit 1
-              ;;
-          esac
+          sdk_lock_version="$(awk '
+            $0 == "[[package]]" { in_sdk = 0; next }
+            $0 == "name = \"eury-sdk\"" { in_sdk = 1; next }
+            in_sdk && $1 == "version" && $2 == "=" {
+              gsub(/"/, "", $3)
+              print $3
+              exit
+            }
+          ' service/Cargo.lock)"
+          sdk_lock_source="$(awk '
+            $0 == "[[package]]" { in_sdk = 0; next }
+            $0 == "name = \"eury-sdk\"" { in_sdk = 1; next }
+            in_sdk && $1 == "source" && $2 == "=" {
+              gsub(/"/, "", $3)
+              print $3
+              exit
+            }
+          ' service/Cargo.lock)"
+          test "$sdk_lock_version" = "$sdk_version"
+          test "$sdk_lock_source" = "registry+https://github.com/rust-lang/crates.io-index"
+          if grep -Fq 'git+https://github.com/EuryOS/EuryOS' service/Cargo.toml service/Cargo.lock; then
+            echo "private EuryOS Git dependency found in the public service repository" >&2
+            exit 1
+          fi
 
           echo "version=$package_version" >> "$GITHUB_OUTPUT"
-          echo "sdk_commit=$sdk_commit" >> "$GITHUB_OUTPUT"
 
       - name: Decide whether this event publishes a release
         id: release_gate
@@ -162,25 +176,7 @@ jobs:
       - name: Run public core tests
         run: cargo test -p webserv-core
 
-      - name: Configure private EuryOS dependency access
-        if: github.event_name != 'pull_request'
-        env:
-          EURYOS_READ_TOKEN: ${{ secrets.EURYOS_READ_TOKEN }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -n "$EURYOS_READ_TOKEN" || {
-            echo "EURYOS_READ_TOKEN repository secret is required for trusted builds" >&2
-            exit 1
-          }
-          git config --global url."https://x-access-token:${EURYOS_READ_TOKEN}@github.com/EuryOS/".insteadOf "https://github.com/EuryOS/"
-
-      - name: Run full workspace tests
-        if: github.event_name != 'pull_request'
-        run: cargo test --workspace
-
       - name: Build standalone EuryOS service
-        if: github.event_name != 'pull_request'
         run: sh sdk/eury-sdk-bundle/0.1.0/build.sh service
 
   release:
@@ -198,33 +194,18 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: actions/checkout@v4
-        with:
-          repository: EuryOS/EuryOS
-          ref: ${{ needs.metadata.outputs.sdk_commit }}
-          path: euryos
-          fetch-depth: 0
-          token: ${{ secrets.EURYOS_READ_TOKEN }}
-
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: nightly-2026-07-26
           components: rust-src, llvm-tools-preview, rustfmt, clippy
 
-      - name: Configure private EuryOS dependency access
-        env:
-          EURYOS_READ_TOKEN: ${{ secrets.EURYOS_READ_TOKEN }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -n "$EURYOS_READ_TOKEN" || {
-            echo "EURYOS_READ_TOKEN repository secret is required for releases" >&2
-            exit 1
-          }
-          git config --global url."https://x-access-token:${EURYOS_READ_TOKEN}@github.com/EuryOS/".insteadOf "https://github.com/EuryOS/"
+      - name: Install public package tool
+        run: cargo install eury-package --version 0.1.0 --locked --root "$RUNNER_TEMP/eury-package"
 
       - name: Build release artifacts
-        run: sh scripts/release.sh euryos "$RUNNER_TEMP/webserv-release" dev
+        env:
+          EURY_PACKAGE_BIN: ${{ runner.temp }}/eury-package/bin/eury-package
+        run: sh scripts/release.sh "$RUNNER_TEMP/webserv-release" dev
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2

@@ -1,28 +1,20 @@
 #!/bin/sh
 set -eu
 
-# Build the release-shaped webserv inputs. The package source build remains
-# standalone; the EuryOS checkout is used only for the current host-side
-# archive/signing tool until that tool has its own distributable bundle.
+# Build the release-shaped webserv inputs. The package source build and the
+# host-side archive/signing tool are both supplied by public inputs.
 
-if [ "$#" -lt 2 ] || [ "$#" -gt 3 ]; then
-    echo "usage: $0 <euryos-checkout> <output-directory> [signing-key|dev]" >&2
+if [ "$#" -lt 1 ] || [ "$#" -gt 2 ]; then
+    echo "usage: $0 <output-directory> [signing-key|dev]" >&2
     exit 2
 fi
 
 WEBSERV_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-EURYOS_ROOT=$(CDPATH= cd -- "$1" && pwd)
-OUTPUT_DIR_INPUT=$2
-SIGNING_KEY=${3:-dev}
+OUTPUT_DIR_INPUT=$1
+SIGNING_KEY=${2:-dev}
 
 mkdir -p "$OUTPUT_DIR_INPUT"
 OUTPUT_DIR=$(CDPATH= cd -- "$OUTPUT_DIR_INPUT" && pwd)
-
-if [ ! -f "$EURYOS_ROOT/Cargo.toml" ] || \
-   ! git -C "$EURYOS_ROOT" rev-parse --git-dir >/dev/null 2>&1; then
-    echo "release: expected an EuryOS git checkout at $EURYOS_ROOT" >&2
-    exit 2
-fi
 
 read_section_value() {
     file=$1
@@ -44,9 +36,9 @@ PACKAGE_VERSION=$(read_section_value "$WEBSERV_ROOT/package/package.toml" packag
 RELEASE_VERSION=$(read_section_value "$WEBSERV_ROOT/package/release.toml" release version)
 CORE_VERSION=$(read_section_value "$WEBSERV_ROOT/Cargo.toml" package version)
 SERVICE_VERSION=$(read_section_value "$WEBSERV_ROOT/service/Cargo.toml" package version)
-SDK_REVISION=$(read_section_value "$WEBSERV_ROOT/package/package.toml" runtime sdk_revision)
+SDK_VERSION=$(read_section_value "$WEBSERV_ROOT/package/package.toml" runtime sdk_version)
 
-for value_name in PACKAGE_VERSION RELEASE_VERSION CORE_VERSION SERVICE_VERSION SDK_REVISION; do
+for value_name in PACKAGE_VERSION RELEASE_VERSION CORE_VERSION SERVICE_VERSION SDK_VERSION; do
     eval "value=\${$value_name}"
     if [ -z "$value" ]; then
         echo "release: could not read $value_name" >&2
@@ -61,22 +53,39 @@ if [ "$PACKAGE_VERSION" != "$RELEASE_VERSION" ] || \
     exit 2
 fi
 
-SDK_COMMIT=$(sed -n 's/.*#\([0-9a-f][0-9a-f]*\)".*/\1/p' "$WEBSERV_ROOT/service/Cargo.lock" | head -n 1)
-EURYOS_COMMIT=$(git -C "$EURYOS_ROOT" rev-parse HEAD)
-case "$EURYOS_COMMIT" in
-    "$SDK_COMMIT") ;;
+SDK_LOCK_VERSION=$(awk '
+    $0 == "[[package]]" { in_sdk = 0; next }
+    $0 == "name = \"eury-sdk\"" { in_sdk = 1; next }
+    in_sdk && $1 == "version" && $2 == "=" {
+        gsub(/"/, "", $3)
+        print $3
+        exit
+    }
+' "$WEBSERV_ROOT/service/Cargo.lock")
+SDK_LOCK_SOURCE=$(awk '
+    $0 == "[[package]]" { in_sdk = 0; next }
+    $0 == "name = \"eury-sdk\"" { in_sdk = 1; next }
+    in_sdk && $1 == "source" && $2 == "=" {
+        gsub(/"/, "", $3)
+        print $3
+        exit
+    }
+' "$WEBSERV_ROOT/service/Cargo.lock")
+if [ "$SDK_VERSION" != "$SDK_LOCK_VERSION" ]; then
+    echo "release: package sdk_version $SDK_VERSION does not match Cargo.lock $SDK_LOCK_VERSION" >&2
+    exit 2
+fi
+case "$SDK_LOCK_SOURCE" in
+    registry+https://github.com/rust-lang/crates.io-index) ;;
     *)
-        echo "release: EuryOS checkout $EURYOS_COMMIT does not match Cargo.lock $SDK_COMMIT" >&2
+        echo "release: eury-sdk is not resolved from crates.io" >&2
         exit 2
         ;;
 esac
-case "$SDK_COMMIT" in
-    "$SDK_REVISION"*) ;;
-    *)
-        echo "release: Cargo.lock revision $SDK_COMMIT does not match package sdk_revision $SDK_REVISION" >&2
-        exit 2
-        ;;
-esac
+if grep -Fq 'git+https://github.com/EuryOS/EuryOS' "$WEBSERV_ROOT/service/Cargo.lock"; then
+    echo "release: service Cargo.lock contains a private EuryOS Git dependency" >&2
+    exit 2
+fi
 
 SDK_BUNDLE="$WEBSERV_ROOT/sdk/eury-sdk-bundle/0.1.0/build.sh"
 BUILD_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/webserv-release-build.XXXXXX")
@@ -106,12 +115,18 @@ cp "$ELF" "$OUTPUT_DIR/$ELF_NAME"
 mkdir -p "$PACKAGE_STAGE/bin"
 cp "$ELF" "$PACKAGE_STAGE/bin/main.elf"
 
-rustup run nightly-2026-07-26 cargo run \
-    --locked \
-    --manifest-path "$EURYOS_ROOT/Cargo.toml" \
-    --package eury-cli \
-    --quiet -- \
-    package "$PACKAGE_STAGE" \
+PACKAGE_TOOL=${EURY_PACKAGE_BIN:-eury-package}
+if [ -x "$PACKAGE_TOOL" ]; then
+    PACKAGE_TOOL_PATH=$PACKAGE_TOOL
+else
+    PACKAGE_TOOL_PATH=$(command -v "$PACKAGE_TOOL" 2>/dev/null || true)
+fi
+if [ -z "$PACKAGE_TOOL_PATH" ] || [ ! -x "$PACKAGE_TOOL_PATH" ]; then
+    echo "release: eury-package is required; install eury-package 0.1.0 or set EURY_PACKAGE_BIN" >&2
+    exit 2
+fi
+
+"$PACKAGE_TOOL_PATH" package "$PACKAGE_STAGE" \
     --metadata "$WEBSERV_ROOT/package/package.toml" \
     --sign "$SIGNING_KEY" \
     -o "$OUTPUT_DIR/$PACKAGE_NAME"
@@ -132,6 +147,8 @@ SIGNATURE_REFERENCE="embedded:$SIGNING_KEY"
     printf '%s\n' '[release]'
     printf 'package = "webserv"\n'
     printf 'version = "%s"\n' "$PACKAGE_VERSION"
+    printf 'sdk = "eury-sdk"\n'
+    printf 'sdk_version = "%s"\n' "$SDK_VERSION"
     printf 'source_revision = "%s"\n' "$SOURCE_REVISION"
     printf 'manifest_sha256 = "%s"\n\n' "$MANIFEST_SHA256"
     printf '%s\n' '[[artifact]]'

@@ -4,6 +4,8 @@
 [release]
 package = "webserv"
 version = "0.1.0"
+sdk = "eury-sdk"
+sdk_version = "0.1.0"
 source_revision = "REPLACE_WITH_TAG_COMMIT"
 manifest_sha256 = "REPLACE_WITH_MANIFEST_DIGEST"
 

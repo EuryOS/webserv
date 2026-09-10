@@ -15,13 +15,11 @@ license = "Proprietary"
 repository = "https://github.com/EuryOS/webserv.git"
 
 [runtime]
-# The package is compiled against this pinned public runtime boundary. The
-# index/release record must replace this revision with the exact one used by
-# each artifact; a floating branch is not a reproducible package input.
+# The package is compiled against this exact public runtime boundary. The
+# version is part of the package contract; the service Cargo.lock records the
+# registry source and exact resolved package graph.
 sdk = "eury-sdk"
 sdk_version = "0.1.0"
-sdk_revision = "0ed54a48"
-abi_revision = "0ed54a48"
 
 [component.webserv]
 kind = "service"
